@@ -29,6 +29,7 @@ By the end, the goal is to feel confident using Docker in any new project.
 |---|---|---|
 | 01 | [First Container — Node.js App](./1.first-container/) | Dockerfile, `docker build`, `docker run`, images vs containers, port mapping |
 | 02 | [Data & Volumes — Feedback App](./2.data-volumes/) | Named volumes, anonymous volumes, bind mounts, `ENV`, `ARG`, `.dockerignore` |
+| 03 | [Networks — SW Favorites API](./3.networks-starting/) | Container networking, `host.docker.internal`, Docker networks, cross-container communication, Postman |
 
 > More projects will be added as I progress through the course. 🚀
 
@@ -51,6 +52,10 @@ docker images                               # List all images
 docker rmi <image>                          # Remove an image
 docker volume ls                            # List all volumes
 docker volume rm <volume>                   # Remove a volume
+docker network create <name>                # Create a Docker network
+docker network ls                           # List all networks
+docker container inspect <container>        # Inspect container details (IP, etc.)
+docker container prune                      # Remove all stopped containers
 ```
 
 ---
