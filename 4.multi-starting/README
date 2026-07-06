@@ -1,0 +1,226 @@
+# Goals App — Multi-Container Docker Project
+
+A simple **Goal Tracking** application built to practice combining multiple Docker building blocks — Images, Containers, Volumes, and Networking — into one realistic, multi-service application.
+
+This project is composed of **3 independent services**, each running in its own container:
+
+| Service   | Tech Stack           | Role                                      |
+|-----------|-----------------------|--------------------------------------------|
+| Database  | MongoDB (official image) | Stores the goals data                    |
+| Backend   | Node.js + Express (REST API) | Handles add / fetch / delete goal logic |
+| Frontend  | React (SPA)           | UI that talks to the Backend API          |
+
+The Frontend never talks to the Database directly — it only communicates with the Backend, and the Backend is the only service that talks to MongoDB.
+
+```
+React (Frontend) → Node/Express (Backend) → MongoDB (Database)
+```
+
+---
+
+## Architecture
+
+- **MongoDB** runs in its own container, based on the official `mongo` image.
+- **Backend** is a custom Node.js/Express REST API (no HTML/GUI — only JSON), Dockerized with a custom `Dockerfile`.
+- **Frontend** is a React Single Page Application, Dockerized with its own `Dockerfile`. Note: React code executes in the **browser**, not inside the container — only the development server runs inside the container.
+
+All three containers are connected through a custom Docker network (`goals-net`) so they can reach each other by container name instead of relying on the host machine.
+
+---
+
+## Prerequisites
+
+- [Docker](https://www.docker.com/) installed and running
+- No need to install MongoDB, Node, or React dependencies locally — everything runs inside containers
+
+---
+
+## Project Structure
+
+```
+project/
+├── backend/
+│   ├── app.js
+│   ├── package.json
+│   ├── Dockerfile
+│   └── .dockerignore
+├── frontend/
+│   ├── src/
+│   ├── package.json
+│   ├── Dockerfile
+│   └── .dockerignore
+└── README.md
+```
+
+---
+
+## 1. Setting up the Network
+
+Create a dedicated Docker network so all containers can communicate directly by name:
+
+```bash
+docker network create goals-net
+```
+
+---
+
+## 2. Running MongoDB
+
+MongoDB uses the **official image** from Docker Hub — no custom `Dockerfile` needed.
+
+### Run with data persistence + authentication
+
+```bash
+docker run --name mongodb \
+  -v data:/data/db \
+  -e MONGO_INITDB_ROOT_USERNAME=max \
+  -e MONGO_INITDB_ROOT_PASSWORD=secret \
+  --network goals-net \
+  --rm -d mongo
+```
+
+**Key points:**
+- `-v data:/data/db` → **named volume** that persists MongoDB's data even if the container is removed (MongoDB stores its data internally at `/data/db`).
+- `MONGO_INITDB_ROOT_USERNAME` / `MONGO_INITDB_ROOT_PASSWORD` → secures the database with credentials, so it can't be accessed without authentication.
+- `--network goals-net` → joins the shared network (no need to publish the port — only the Backend needs to reach it, and it does so through the network).
+
+---
+
+## 3. Backend (Node.js API)
+
+### Dockerfile highlights
+- Based on `FROM node`
+- `WORKDIR /app`
+- Copies `package.json`, runs `npm install`, then copies the rest of the source
+- Uses **Nodemon** (`npm start` → `nodemon app.js`) instead of `node app.js` so the server auto-restarts on code changes
+- Reads MongoDB credentials from **environment variables** (`MONGODB_USERNAME`, `MONGODB_PASSWORD`) instead of hardcoding them
+- `EXPOSE 80`
+- `.dockerignore` excludes `node_modules`, `.git`, `Dockerfile` to speed up builds
+
+### Build the image
+
+```bash
+cd backend
+docker build -t goals-node .
+```
+
+### Run the container
+
+```bash
+docker run --name goals-backend \
+  -v logs:/app/logs \
+  -v "$(pwd):/app" \
+  -v /app/node_modules \
+  -e MONGODB_USERNAME=max \
+  -e MONGODB_PASSWORD=secret \
+  --network goals-net \
+  -p 80:80 \
+  --rm -d goals-node
+```
+
+**Key points:**
+- `-v logs:/app/logs` → **named volume** to persist log files even if the container is removed.
+- `-v "$(pwd):/app"` → **bind mount** of the local source code into the container, so any code change is reflected live (combined with Nodemon for auto-restart).
+- `-v /app/node_modules` → **anonymous volume** that protects the container's own `node_modules` from being overwritten by the bind mount above.
+- The MongoDB connection string uses the container name and requires `authSource=admin`, e.g.:
+  ```
+  mongodb://max:secret@mongodb:27017/goals?authSource=admin
+  ```
+- `-p 80:80` → published so the browser (via the Frontend) can reach the Backend at `localhost`.
+- `--network goals-net` → allows the Backend to resolve MongoDB by container name (`mongodb`).
+
+---
+
+## 4. Frontend (React SPA)
+
+### Dockerfile highlights
+- Based on `FROM node` (Node is needed to run React's dev server and build tools, even though React itself isn't a Node app)
+- `WORKDIR /app`
+- Copies `package.json`, runs `npm install`, then copies the rest of the source
+- Runs `npm start` to launch the React development server
+- `EXPOSE 3000`
+- `.dockerignore` excludes `node_modules`, `.git`, `Dockerfile`
+- Must be run with `-it` (interactive mode) — React's dev server expects an input stream and will exit immediately without it
+
+### Build the image
+
+```bash
+cd frontend
+docker build -t goals-react .
+```
+
+### Run the container
+
+```bash
+docker run -it --name goals-frontend \
+  -v "$(pwd)/src:/app/src" \
+  -p 3000:3000 \
+  --rm goals-react
+```
+
+**Key points:**
+- `-v "$(pwd)/src:/app/src"` → **bind mount** of only the `src` folder, so code edits trigger React's built-in live reload (no Nodemon needed — React's dev server watches files automatically).
+- `-p 3000:3000` → must be published since the app is opened from the browser on the host machine.
+- **Important:** Inside `src/App.js`, API requests must point to `localhost` (not the Backend container name). React code runs in the **browser**, and the browser has no knowledge of Docker container names — only Docker itself can resolve those. That's why the Frontend does **not** need `--network goals-net`, while the Backend does.
+- **Windows + WSL2 users:** if live reload doesn't trigger automatically, keep the project inside the WSL2 Linux filesystem rather than the Windows filesystem.
+
+---
+
+## Running Everything
+
+1. Start MongoDB (with the network, volume, and credentials)
+2. Start the Backend (with the network, published port, volumes, and env variables)
+3. Start the Frontend (with the bind mount and published port)
+4. Open the app at:
+   ```
+   http://localhost:3000
+   ```
+
+You should be able to add, view, and delete goals, with data persisting across container restarts.
+
+---
+
+## What This Project Demonstrates
+
+- ✅ Multiple containers working together as one system
+- ✅ Docker networking (custom bridge network, container-name resolution)
+- ✅ Named volumes for data persistence (MongoDB data, log files)
+- ✅ Bind mounts for live source code updates (Backend & Frontend)
+- ✅ Anonymous volumes to protect `node_modules`
+- ✅ Environment variables instead of hardcoded credentials
+- ✅ Database authentication/access control
+- ✅ `.dockerignore` to speed up image builds
+- ✅ Using Nodemon for auto-restart during development
+
+---
+
+## Notes / Limitations
+
+⚠️ **This setup is for local development only.** It is not production-ready:
+- Live reload, Nodemon, and bind mounts are development conveniences, not production practices.
+- Credentials are passed as plain environment variables at runtime — a real deployment would use a more secure secrets mechanism.
+- Every service currently requires a long, manual `docker run` command with many flags (volumes, network, env vars, ports). Managing three separate long commands is error-prone — forgetting a single flag (e.g., a volume) can silently break the whole app.
+
+**Next step:** replace these manual multi-container commands with a single, declarative configuration (e.g., Docker Compose) so the entire stack can be started with one command.
+
+---
+
+## Useful Commands
+
+```bash
+# List running containers
+docker ps
+
+# View logs for a container
+docker logs goals-backend
+docker logs mongodb
+
+# Remove stopped containers
+docker container prune
+
+# Remove unused images
+docker image prune -a
+
+# List networks
+docker network ls
+```
