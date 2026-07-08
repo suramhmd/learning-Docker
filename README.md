@@ -21,6 +21,7 @@ By the end, the goal is to feel confident using Docker in any new project.
 | 02 | [Data & Volumes — Feedback App](./2.data-volumes/) | Named volumes, anonymous volumes, bind mounts, `ENV`, `ARG`, `.dockerignore` |
 | 03 | [Networks — SW Favorites API](./3.networks-starting/) | Container networking, `host.docker.internal`, Docker networks, cross-container communication, Postman |
 | 04 | [Multi-Container App — Goals App](./4.multi-container/) | MongoDB + Node/Express + React in separate containers, custom Docker networks, named/anonymous volumes, bind mounts for live code updates, Nodemon, environment variables for credentials, database authentication |
+| 05 | [Docker Compose — Goals App](./5.docker-compose/) | `docker-compose.yaml`, `services`, `build` vs `image`, automatic default networks, named/anonymous volumes & bind mounts with relative paths, `env_file`, `depends_on`, `docker-compose up`/`down`, service names vs container names |
 > More projects will be added as I progress through the course. 🚀
 ---
 ## 🛠️ Core Docker Commands Learned So Far
@@ -49,6 +50,14 @@ docker network ls                           # List all networks
 docker container inspect <container>        # Inspect container details (IP, etc.)
 docker container prune                      # Remove all stopped containers
 docker image prune -a                       # Remove all unused images
+
+# Docker Compose
+docker-compose up                           # Build (if needed) and start all services
+docker-compose up -d                        # Start all services in detached mode
+docker-compose up --build                   # Force rebuild of images before starting
+docker-compose build                        # Build only the custom images (no containers started)
+docker-compose down                         # Stop and remove containers + default network (keeps volumes)
+docker-compose down -v                      # Stop and remove containers + network + volumes
 ```
 ---
 ## 🔗 Resources
